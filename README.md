@@ -2,6 +2,8 @@
 
 Adapter thử nghiệm cho private API của Tricount. Adapter đọc tricounts, thành viên, tỷ giá, profile, metadata category và hỗ trợ CRUD entry; tài khoản thiết bị, session và share token được giữ ở backend. API gốc là API riêng tư, có thể thay đổi mà không báo trước.
 
+Hướng dẫn tích hợp cho dịch vụ khác: [INTEGRATION_API.md](INTEGRATION_API.md).
+
 ## Chạy bằng Docker Compose
 
 ```bash
@@ -31,6 +33,7 @@ Mở Swagger UI tại <http://localhost:43765/docs>.
 - `GET /metadata/categories` — danh sách category registry và entry được adapter biết.
 - `GET /exchange-rates?currency=USD` — tỷ giá theo currency nguồn.
 - `GET /tricounts` — liệt kê tricounts; có thể lọc bằng một hoặc nhiều share token trong `.env`.
+- `POST /tricounts/sync` — đồng bộ một hoặc nhiều tricount bằng share token gửi trong request body, không cần sửa `.env`.
 - `GET /tricounts/summary` — danh sách gọn gồm `id`, `name`, `currency`, `emoji`, `status`.
 - `GET /tricounts/{registry_id}` — đọc một tricount.
 - `GET /tricounts/{registry_id}/members` — danh sách thành viên và UUID trong tricount.
@@ -39,6 +42,19 @@ Mở Swagger UI tại <http://localhost:43765/docs>.
 - `POST /tricounts/{registry_id}/entries` — thêm expense vào tricount.
 - `PUT /tricounts/{registry_id}/entries/{entry_id}` — cập nhật entry bằng toàn bộ transaction object.
 - `DELETE /tricounts/{registry_id}/entries/{entry_id}` — xóa entry.
+
+Để thêm tricount bằng token động, gọi `POST /tricounts/sync` với body:
+
+```json
+{
+  "share_tokens": [
+    "tShareTokenOne",
+    "tShareTokenTwo"
+  ]
+}
+```
+
+Response có `items` với metadata gọn (`id`, `name`, `currency`, `emoji`, `status`) và `errors` cho token không đồng bộ được. `errors[].index` trỏ về vị trí token trong request; token không được lặp lại trong response. Dùng `id` trong `items` cho các route tricount/entry. Body cũ `{ "share_token": "..." }` vẫn được hỗ trợ cho một token và trả về một metadata object. Share token là credential, gửi trong body thay vì query string.
 
 Payload tối thiểu cho `POST /tricounts/{registry_id}/entries`:
 

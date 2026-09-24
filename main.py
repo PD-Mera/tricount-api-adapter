@@ -91,6 +91,11 @@ class EntryCreate(EntryPayload):
     status: str = "ACTIVE"
 
 
+class ShareTokenRequest(BaseModel):
+    share_token: StrictStr | None = None
+    share_tokens: list[StrictStr] | None = None
+
+
 def _read_or_create_device() -> tuple[str, str, str]:
     """Return the persistent app ID, private key PEM, and public key PEM."""
     DEVICE_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -272,10 +277,11 @@ class TricountClient:
 
         raise HTTPException(status_code=502, detail="Tricount authentication failed after retry")
 
-    async def list_registries(self) -> list[dict[str, Any]]:
+    async def list_registries(self, share_tokens: list[str] | None = None) -> list[dict[str, Any]]:
         await self._ensure_session()
         path = f"/v1/user/{self.user_id}/registry"
-        if not SHARE_TOKENS:
+        tokens = SHARE_TOKENS if share_tokens is None else share_tokens
+        if not tokens:
             payload = await self._request("GET", path)
             return _unwrap(payload, "Registry")
 
@@ -283,7 +289,7 @@ class TricountClient:
         # Query each configured token and merge results by registry ID.
         registries_by_id: dict[int, dict[str, Any]] = {}
         registries_without_id: list[dict[str, Any]] = []
-        for share_token in SHARE_TOKENS:
+        for share_token in tokens:
             payload = await self._request(
                 "GET",
                 path,
@@ -441,6 +447,57 @@ class TricountClient:
         )
         self.synced_share_tokens.add(share_token)
 
+    async def sync_shared_registry(self, share_token: str) -> dict[str, Any]:
+        await self._ensure_session()
+        share_token = share_token.strip()
+        if not share_token:
+            raise HTTPException(status_code=422, detail="share_token must not be empty")
+        await self._sync_shared_registry(share_token)
+        registries = await self.list_registries([share_token])
+        if not registries:
+            raise HTTPException(status_code=404, detail="No tricount found for this share token")
+        registry = registries[0]
+        return {
+            "id": registry.get("id"),
+            "name": registry.get("title"),
+            "currency": registry.get("currency"),
+            "emoji": registry.get("emoji"),
+            "status": registry.get("status"),
+        }
+
+    async def sync_shared_registries(self, share_tokens: list[str]) -> dict[str, Any]:
+        await self._ensure_session()
+        items = []
+        errors = []
+        seen_tokens: set[str] = set()
+        seen_registry_ids: set[str] = set()
+
+        for index, raw_token in enumerate(share_tokens):
+            token = raw_token.strip()
+            if not token:
+                errors.append({"index": index, "status_code": 422, "message": "Share token is empty"})
+                continue
+            if token in seen_tokens:
+                continue
+            seen_tokens.add(token)
+
+            try:
+                registry = await self.sync_shared_registry(token)
+            except HTTPException as exc:
+                errors.append({
+                    "index": index,
+                    "status_code": exc.status_code,
+                    "message": "Could not sync share token",
+                })
+                continue
+
+            registry_id = str(registry.get("id"))
+            if registry_id not in seen_registry_ids:
+                seen_registry_ids.add(registry_id)
+                items.append(registry)
+
+        return {"items": items, "errors": errors}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -481,6 +538,17 @@ async def get_categories() -> dict[str, Any]:
 async def list_tricounts() -> list[dict[str, Any]]:
     """List this device's tricounts, or filter by the configured share token."""
     return await app.state.tricount.list_registries()
+
+
+@app.post("/tricounts/sync")
+async def sync_tricount(request: ShareTokenRequest) -> dict[str, Any]:
+    if request.share_token is not None and request.share_tokens is not None:
+        raise HTTPException(status_code=422, detail="Send either share_token or share_tokens, not both")
+    if request.share_token is not None:
+        return await app.state.tricount.sync_shared_registry(request.share_token)
+    if request.share_tokens is not None:
+        return await app.state.tricount.sync_shared_registries(request.share_tokens)
+    raise HTTPException(status_code=422, detail="Provide share_token or share_tokens")
 
 
 @app.get("/tricounts/summary")
