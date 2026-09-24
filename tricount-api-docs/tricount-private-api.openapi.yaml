@@ -1,0 +1,999 @@
+openapi: 3.1.0
+info:
+  title: Tricount Private API
+  version: 14.0.3-reverse-engineered
+  description: |
+    Unofficial integration contract for the private HTTP API used by the
+    Tricount Android application. This is not an official bunq/Tricount API
+    specification and may change without notice.
+
+    Base application inspected: com.bunq.tricount.android, Android app 14.0.3.
+    Keep device/session/share credentials on the backend.
+servers:
+  - url: https://api.tricount.bunq.com
+    description: Tricount production API
+
+tags:
+  - name: Session
+  - name: User
+  - name: Registry
+  - name: Members
+  - name: Entries
+  - name: Attachments
+  - name: Gallery
+  - name: Exchange
+
+security:
+  - AppId: []
+    SessionToken: []
+    ClientRequestId: []
+
+paths:
+  /v1/session-registry-installation:
+    post:
+      tags: [Session]
+      operationId: createSessionRegistryInstallation
+      summary: Register/refresh an anonymous Tricount device session
+      description: |
+        Creates a Tricount API session from a persistent installation UUID and
+        RSA public key. Parse Token.token and UserPerson.id from the response.
+        This operation does not require X-Bunq-Client-Authentication.
+      security:
+        - AppId: []
+          ClientRequestId: []
+      parameters:
+        - $ref: '#/components/parameters/UserAgent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionInstallationRequest'
+            example:
+              app_installation_uuid: 7d624fbe-946c-45af-a4b8-13d6dd2d275a
+              client_public_key: |-
+                -----BEGIN PUBLIC KEY-----
+                ...
+                -----END PUBLIC KEY-----
+              device_description: Android
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionInstallationEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/UserAgent'
+    get:
+      tags: [User]
+      operationId: getUser
+      summary: Get the API user assigned to this device
+      responses:
+        '200':
+          description: User response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/UserAgent'
+    get:
+      tags: [Registry]
+      operationId: listRegistries
+      summary: List/fetch tricount registries
+      parameters:
+        - name: public_identifier_token
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Sharing token, for example tABC123xyz.
+        - name: registry_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Registry list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      tags: [Registry]
+      operationId: createRegistry
+      summary: Create a tricount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryCreateRequest'
+            example:
+              currency: JPY
+              title: Japan Trip
+              description: Trip expenses
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/UserAgent'
+    get:
+      tags: [Registry]
+      operationId: getRegistry
+      summary: Read one tricount
+      responses:
+        '200':
+          description: Registry response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    put:
+      tags: [Registry]
+      operationId: updateRegistry
+      summary: Update tricount metadata/memberships/link state
+      description: |
+        Private endpoint with several accepted update shapes. Only fields that
+        have been observed are modeled. For member rename/deletion, send the
+        complete membership list as required by the app behavior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryUpdateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Registry]
+      operationId: deleteRegistry
+      summary: Delete a tricount
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry-synchronization:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/UserAgent'
+    post:
+      tags: [Registry]
+      operationId: synchronizeRegistries
+      summary: Synchronize/join tricounts by sharing token
+      description: |
+        This endpoint can grant substantial access to a tricount from a sharing
+        token. Treat sharing tokens as credentials.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrySynchronizationRequest'
+            example:
+              all_registry_active:
+                - public_identifier_token: tABC123xyz
+              all_registry_archived: []
+              all_registry_deleted: []
+      responses:
+        '200':
+          description: Registry synchronization result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrySynchronizationEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/registry-membership:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/UserAgent'
+    get:
+      tags: [Members]
+      operationId: listRegistryMemberships
+      summary: List tricount members
+      responses:
+        '200':
+          description: Membership list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MembershipListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/registry-membership/{membershipId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/MembershipId'
+      - $ref: '#/components/parameters/UserAgent'
+    put:
+      tags: [Members]
+      operationId: updateRegistryMembership
+      summary: Update one membership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipUpdateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/registry-entry:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/UserAgent'
+    post:
+      tags: [Entries]
+      operationId: createRegistryEntry
+      summary: Create expense, income, or reimbursement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryEntryWrite'
+            examples:
+              expense:
+                value:
+                  uuid: a1b2c3d4-0000-4000-8000-000000000001
+                  description: Dinner
+                  amount:
+                    value: '-1200'
+                    currency: JPY
+                  membership_uuid_owner: member-payer-uuid
+                  allocations:
+                    - membership_uuid: member-1-uuid
+                      amount: {value: '-600', currency: JPY}
+                      type: AMOUNT
+                    - membership_uuid: member-2-uuid
+                      amount: {value: '-600', currency: JPY}
+                      type: AMOUNT
+                  type_transaction: NORMAL
+                  status: ACTIVE
+                  date: '2026-09-23 20:30:00.000000'
+                  category: FOOD_AND_DRINK
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/registry-entry/{entryId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/EntryId'
+      - $ref: '#/components/parameters/UserAgent'
+    put:
+      tags: [Entries]
+      operationId: updateRegistryEntry
+      summary: Replace/update an existing registry entry
+      description: Treat this as a full update, not PATCH semantics.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryEntryWrite'
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Entries]
+      operationId: deleteRegistryEntry
+      summary: Delete a registry entry
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/attachment:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/UserAgent'
+    post:
+      tags: [Attachments]
+      operationId: uploadRegistryAttachment
+      summary: Upload receipt/transaction attachment
+      parameters:
+        - $ref: '#/components/parameters/AttachmentDescription'
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: {type: string, format: binary}
+          image/png:
+            schema: {type: string, format: binary}
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/gallery-attachment:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/UserAgent'
+    get:
+      tags: [Gallery]
+      operationId: listRegistryGalleryAttachments
+      summary: List tricount gallery attachments
+      responses:
+        '200':
+          description: Gallery attachment list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GalleryListEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/registry/{registryId}/gallery-attachment/{uuid}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/RegistryId'
+      - $ref: '#/components/parameters/AttachmentUuid'
+      - $ref: '#/components/parameters/UserAgent'
+    post:
+      tags: [Gallery]
+      operationId: uploadRegistryGalleryAttachment
+      summary: Upload gallery image
+      parameters:
+        - $ref: '#/components/parameters/AttachmentDescription'
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: {type: string, format: binary}
+          image/png:
+            schema: {type: string, format: binary}
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200':
+          description: UUID response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UuidEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      tags: [Gallery]
+      operationId: deleteRegistryGalleryAttachment
+      summary: Delete gallery image
+      responses:
+        '200':
+          $ref: '#/components/responses/IdResponse'
+        default:
+          $ref: '#/components/responses/Error'
+
+  /v1/user/{userId}/exchange-rate:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/UserAgent'
+    get:
+      tags: [Exchange]
+      operationId: listExchangeRates
+      summary: Get exchange rates from one source currency
+      parameters:
+        - name: currency
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
+          example: USD
+      responses:
+        '200':
+          description: Exchange rates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeRateEnvelope'
+        default:
+          $ref: '#/components/responses/Error'
+
+components:
+  securitySchemes:
+    AppId:
+      type: apiKey
+      in: header
+      name: app-id
+      description: Persistent installation UUID.
+    SessionToken:
+      type: apiKey
+      in: header
+      name: X-Bunq-Client-Authentication
+      description: Token.token returned by session-registry-installation.
+    ClientRequestId:
+      type: apiKey
+      in: header
+      name: X-Bunq-Client-Request-Id
+      description: |
+        Required client request ID header. A current reverse-engineered client
+        uses 049bfcdf-6ae4-4cee-af7b-45da31ea85d0.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: {type: integer, format: int64}
+      description: UserPerson.id returned by session installation.
+    RegistryId:
+      name: registryId
+      in: path
+      required: true
+      schema: {type: integer, format: int64}
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema: {type: integer, format: int64}
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema: {type: integer, format: int64}
+    AttachmentUuid:
+      name: uuid
+      in: path
+      required: true
+      schema: {type: string}
+    UserAgent:
+      name: User-Agent
+      in: header
+      required: true
+      schema:
+        type: string
+        default: com.bunq.tricount.android:RELEASE:7.0.7:3174:ANDROID:13:C
+      description: The private API expects a Tricount-like Android User-Agent.
+    AttachmentDescription:
+      name: X-Bunq-Attachment-Description
+      in: header
+      required: false
+      schema:
+        type: string
+        default: ''
+
+  responses:
+    IdResponse:
+      description: ID response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IdEnvelope'
+    Error:
+      description: Private API error response. Exact error payload is not stable.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+
+  schemas:
+    SessionInstallationRequest:
+      type: object
+      required: [app_installation_uuid, client_public_key, device_description]
+      properties:
+        app_installation_uuid:
+          type: string
+          format: uuid
+        client_public_key:
+          type: string
+        device_description:
+          type: string
+          default: Android
+
+    SessionInstallationEnvelope:
+      type: object
+      required: [Response]
+      properties:
+        Response:
+          type: array
+          items:
+            oneOf:
+              - type: object
+                properties:
+                  Token:
+                    $ref: '#/components/schemas/Token'
+              - type: object
+                properties:
+                  UserPerson:
+                    $ref: '#/components/schemas/UserPerson'
+              - type: object
+                additionalProperties: true
+
+    Token:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string}
+      additionalProperties: true
+
+    UserPerson:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        display_name: {type: [string, 'null']}
+        public_uuid: {type: [string, 'null']}
+        status: {type: [string, 'null']}
+        sub_status: {type: [string, 'null']}
+        language: {type: [string, 'null']}
+      additionalProperties: true
+
+    UserEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              UserPerson:
+                $ref: '#/components/schemas/UserPerson'
+            additionalProperties: true
+
+    IdEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              Id:
+                type: object
+                properties:
+                  id: {type: integer, format: int64}
+                required: [id]
+            additionalProperties: true
+
+    UuidEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              UUID:
+                type: object
+                properties:
+                  uuid: {type: string}
+            additionalProperties: true
+
+    Amount:
+      type: object
+      required: [value, currency]
+      properties:
+        value:
+          type: string
+          description: Decimal encoded as string.
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    AliasRequest:
+      type: object
+      properties:
+        name: {type: string}
+        type:
+          type: string
+          examples: [UUID]
+        value: {type: string}
+      additionalProperties: true
+
+    Pointer:
+      type: object
+      properties:
+        type: {type: [string, 'null']}
+        value: {type: [string, 'null']}
+        name: {type: [string, 'null']}
+      additionalProperties: true
+
+    AliasResponse:
+      type: object
+      properties:
+        display_name: {type: [string, 'null']}
+        pointer:
+          $ref: '#/components/schemas/Pointer'
+      additionalProperties: true
+
+    MembershipWrite:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        uuid: {type: string}
+        status: {type: string}
+        auto_add_card_transaction: {type: [string, 'null']}
+        setting:
+          type: [object, 'null']
+          additionalProperties: true
+        alias:
+          $ref: '#/components/schemas/AliasRequest'
+      additionalProperties: true
+
+    Membership:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        uuid: {type: string}
+        alias:
+          $ref: '#/components/schemas/AliasResponse'
+        status: {type: [string, 'null']}
+        setting:
+          type: [object, 'null']
+          additionalProperties: true
+      additionalProperties: true
+
+    MembershipUpdateRequest:
+      type: object
+      properties:
+        alias:
+          $ref: '#/components/schemas/AliasRequest'
+      additionalProperties: true
+
+    AllocationWrite:
+      type: object
+      required: [membership_uuid, amount, type]
+      properties:
+        membership_uuid: {type: string}
+        amount:
+          $ref: '#/components/schemas/Amount'
+        amount_local:
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        type:
+          type: string
+          enum: [AMOUNT, RATIO]
+        share_ratio:
+          type: [integer, 'null']
+      additionalProperties: true
+
+    Allocation:
+      type: object
+      properties:
+        amount:
+          $ref: '#/components/schemas/Amount'
+        amount_local:
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        membership:
+          type: object
+          additionalProperties: true
+        type:
+          type: [string, 'null']
+        share_ratio:
+          type: [integer, 'null']
+      additionalProperties: true
+
+    AttachmentId:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+      required: [id]
+      additionalProperties: true
+
+    RegistryEntryWrite:
+      type: object
+      required:
+        - description
+        - amount
+        - membership_uuid_owner
+        - allocations
+        - type_transaction
+        - status
+        - date
+      properties:
+        uuid:
+          type: string
+          description: Recommended for create requests.
+        description: {type: string}
+        amount:
+          $ref: '#/components/schemas/Amount'
+        amount_local:
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        exchange_rate: {type: [string, 'null']}
+        membership_uuid_owner: {type: string}
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllocationWrite'
+        type_transaction:
+          type: string
+          enum: [NORMAL, INCOME, BALANCE]
+        status: {type: string}
+        date:
+          type: string
+          description: 'Observed format: YYYY-MM-DD HH:MM:SS.ffffff'
+        category: {type: [string, 'null']}
+        category_custom: {type: [string, 'null']}
+        attachment:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachmentId'
+      additionalProperties: true
+
+    RegistryEntry:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        uuid: {type: string}
+        date: {type: string}
+        description: {type: string}
+        type: {type: [string, 'null']}
+        type_transaction:
+          type: [string, 'null']
+        status: {type: [string, 'null']}
+        amount:
+          $ref: '#/components/schemas/Amount'
+        amount_local:
+          oneOf:
+            - $ref: '#/components/schemas/Amount'
+            - type: 'null'
+        exchange_rate: {type: [string, 'null']}
+        membership_owned:
+          type: [object, 'null']
+          additionalProperties: true
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Allocation'
+        category: {type: [string, 'null']}
+        category_custom: {type: [string, 'null']}
+        attachment:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+
+    Registry:
+      type: object
+      properties:
+        id: {type: integer, format: int64}
+        uuid: {type: string}
+        title: {type: string}
+        description: {type: [string, 'null']}
+        currency: {type: string}
+        emoji: {type: [string, 'null']}
+        category: {type: [string, 'null']}
+        status:
+          type: [string, 'null']
+          examples: [READ_WRITE]
+        created: {type: [string, 'null']}
+        public_identifier_token: {type: [string, 'null']}
+        membership_uuid_active: {type: [string, 'null']}
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/Membership'
+        all_registry_entry:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistryEntry'
+        all_registry_gallery_attachment:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true
+
+    RegistryListEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              Registry:
+                $ref: '#/components/schemas/Registry'
+            additionalProperties: true
+
+    RegistryCreateRequest:
+      type: object
+      required: [currency, title]
+      properties:
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        title: {type: string}
+        description: {type: [string, 'null']}
+      additionalProperties: true
+
+    RegistryUpdateRequest:
+      type: object
+      properties:
+        title: {type: string}
+        emoji: {type: [string, 'null']}
+        category: {type: string}
+        status:
+          type: string
+          enum: [READ_WRITE, READ_ONLY]
+        membership_uuid_active: {type: string}
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/MembershipWrite'
+        deleted_membership_ids:
+          type: array
+          items: {type: integer, format: int64}
+      additionalProperties: true
+
+    RegistrySynchronizationItem:
+      type: object
+      required: [public_identifier_token]
+      properties:
+        public_identifier_token: {type: string}
+      additionalProperties: true
+
+    RegistrySynchronizationRequest:
+      type: object
+      required: [all_registry_active, all_registry_archived, all_registry_deleted]
+      properties:
+        all_registry_active:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrySynchronizationItem'
+        all_registry_archived:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrySynchronizationItem'
+        all_registry_deleted:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrySynchronizationItem'
+
+    RegistrySynchronization:
+      type: object
+      properties:
+        all_registry_active:
+          type: array
+          items:
+            $ref: '#/components/schemas/Registry'
+        all_registry_archived:
+          type: array
+          items:
+            $ref: '#/components/schemas/Registry'
+        all_registry_deleted:
+          type: array
+          items:
+            $ref: '#/components/schemas/Registry'
+      additionalProperties: true
+
+    RegistrySynchronizationEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              RegistrySynchronization:
+                $ref: '#/components/schemas/RegistrySynchronization'
+            additionalProperties: true
+
+    MembershipListEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              RegistryMembershipNonUser:
+                $ref: '#/components/schemas/Membership'
+            additionalProperties: true
+
+    GalleryUrl:
+      type: object
+      properties:
+        type: {type: string}
+        url: {type: string, format: uri}
+      additionalProperties: true
+
+    GalleryAttachment:
+      type: object
+      properties:
+        attachment:
+          type: object
+          properties:
+            id: {type: integer, format: int64}
+            uuid: {type: string}
+            content_type: {type: string}
+            urls:
+              type: array
+              items:
+                $ref: '#/components/schemas/GalleryUrl'
+          additionalProperties: true
+        membership_uuid: {type: [string, 'null']}
+      additionalProperties: true
+
+    GalleryListEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              RegistryGalleryAttachment:
+                $ref: '#/components/schemas/GalleryAttachment'
+            additionalProperties: true
+
+    ExchangeRate:
+      type: object
+      properties:
+        currency_source: {type: string}
+        currency_target: {type: string}
+        rate: {type: string}
+        description: {type: [string, 'null']}
+        number_of_decimal: {type: [integer, 'null']}
+        symbol: {type: [string, 'null']}
+      additionalProperties: true
+
+    ExchangeRateEnvelope:
+      type: object
+      properties:
+        Response:
+          type: array
+          items:
+            type: object
+            properties:
+              ExchangeRate:
+                $ref: '#/components/schemas/ExchangeRate'
+            additionalProperties: true
