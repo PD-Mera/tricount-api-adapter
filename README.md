@@ -10,13 +10,7 @@ Hướng dẫn tích hợp cho dịch vụ khác: [INTEGRATION_API.md](INTEGRATI
 cp .env.example .env
 ```
 
-Đặt `TRICOUNT_SHARE_TOKENS` trong `.env` nếu muốn lấy một hoặc nhiều tricount được chia sẻ. Có thể phân cách token bằng dấu phẩy; mỗi token được truy vấn riêng rồi adapter gộp kết quả theo `id`. Ví dụ:
-
-```dotenv
-TRICOUNT_SHARE_TOKENS=tTokenOne,tTokenTwo
-```
-
-`TRICOUNT_SHARE_TOKEN` đơn lẻ vẫn được hỗ trợ. Sau đó chạy:
+Share token không cần cấu hình trong `.env`. Gửi token động qua `POST /tricounts/sync` khi muốn thêm tricount chia sẻ vào session. Sau đó chạy:
 
 ```bash
 docker compose up --build
@@ -32,7 +26,7 @@ Mở Swagger UI tại <http://localhost:43765/docs>.
 - `GET /profile` — thông tin user của session hiện tại.
 - `GET /metadata/categories` — danh sách category registry và entry được adapter biết.
 - `GET /exchange-rates?currency=USD` — tỷ giá theo currency nguồn.
-- `GET /tricounts` — liệt kê tricounts; có thể lọc bằng một hoặc nhiều share token trong `.env`.
+- `GET /tricounts` — liệt kê các tricount đã gắn với session.
 - `POST /tricounts/sync` — đồng bộ một hoặc nhiều tricount bằng share token gửi trong request body, không cần sửa `.env`.
 - `GET /tricounts/summary` — danh sách gọn gồm `id`, `name`, `currency`, `emoji`, `status`.
 - `GET /tricounts/{registry_id}` — đọc một tricount.

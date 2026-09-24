@@ -15,10 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 BASE_URL = os.getenv("TRICOUNT_BASE_URL", "https://api.tricount.bunq.com").rstrip("/")
 DEVICE_FILE = Path(os.getenv("TRICOUNT_DEVICE_FILE", "/data/device.json"))
-SHARE_TOKENS_VALUE = os.getenv("TRICOUNT_SHARE_TOKENS", "").strip()
-if not SHARE_TOKENS_VALUE:
-    SHARE_TOKENS_VALUE = os.getenv("TRICOUNT_SHARE_TOKEN", "").strip()
-SHARE_TOKENS = [token.strip() for token in SHARE_TOKENS_VALUE.replace("\n", ",").split(",") if token.strip()]
 USER_AGENT = os.getenv(
     "TRICOUNT_USER_AGENT",
     "com.bunq.tricount.android:RELEASE:7.0.7:3174:ANDROID:13:C",
@@ -280,8 +276,7 @@ class TricountClient:
     async def list_registries(self, share_tokens: list[str] | None = None) -> list[dict[str, Any]]:
         await self._ensure_session()
         path = f"/v1/user/{self.user_id}/registry"
-        tokens = SHARE_TOKENS if share_tokens is None else share_tokens
-        if not tokens:
+        if not share_tokens:
             payload = await self._request("GET", path)
             return _unwrap(payload, "Registry")
 
@@ -289,7 +284,7 @@ class TricountClient:
         # Query each configured token and merge results by registry ID.
         registries_by_id: dict[int, dict[str, Any]] = {}
         registries_without_id: list[dict[str, Any]] = []
-        for share_token in tokens:
+        for share_token in share_tokens:
             payload = await self._request(
                 "GET",
                 path,

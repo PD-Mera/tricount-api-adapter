@@ -13,7 +13,7 @@ Adapter hiện chưa yêu cầu API key ở phía service. Chỉ cho dịch vụ
 
 ## Luồng tích hợp khuyến nghị
 
-1. Gửi một hoặc nhiều share token tới `POST /tricounts/sync`.
+1. Khi thêm tricount chia sẻ mới, gửi một hoặc nhiều share token tới `POST /tricounts/sync`.
 2. Lấy `id` và `name` trong `items` để hiển thị/chọn tricount.
 3. Lấy thành viên bằng `GET /tricounts/{registry_id}/members`; dùng `uuid` của thành viên cho entry.
 4. Lấy category hợp lệ từ `GET /metadata/categories`.
@@ -83,7 +83,7 @@ Response mẫu:
 
 `errors[].index` là vị trí token trong mảng request, bắt đầu từ `0`. Token không được trả lại trong response. Các token trùng nhau được xử lý một lần; các token thành công vẫn được trả trong `items` dù token khác lỗi.
 
-Request cũ với một token vẫn được hỗ trợ:
+Chỉ cần gọi route này một lần cho mỗi tricount chia sẻ mới. Các tricount đã gắn với session sẽ xuất hiện trong `GET /tricounts` và không cần gửi token lại. Request cũ với một token vẫn được hỗ trợ:
 
 ```json
 {"share_token": "tShareTokenOne"}

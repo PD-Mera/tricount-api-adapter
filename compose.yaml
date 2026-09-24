@@ -2,13 +2,12 @@ services:
   tricount-api:
     build: .
     image: local/tricount-api-adapter
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    # command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app"]
     ports:
       - "43765:8000"
     environment:
       TRICOUNT_BASE_URL: ${TRICOUNT_BASE_URL:-https://api.tricount.bunq.com}
-      TRICOUNT_SHARE_TOKENS: ${TRICOUNT_SHARE_TOKENS:-}
-      TRICOUNT_SHARE_TOKEN: ${TRICOUNT_SHARE_TOKEN:-}
       TRICOUNT_USER_AGENT: ${TRICOUNT_USER_AGENT:-com.bunq.tricount.android:RELEASE:7.0.7:3174:ANDROID:13:C}
       TRICOUNT_CLIENT_REQUEST_ID: ${TRICOUNT_CLIENT_REQUEST_ID:-049bfcdf-6ae4-4cee-af7b-45da31ea85d0}
     volumes:
